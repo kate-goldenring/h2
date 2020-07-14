@@ -23,10 +23,10 @@
 //!
 //! The [`Connection`] instance is used to accept inbound HTTP/2.0 streams. It
 //! does this by implementing [`futures::Stream`]. When a new stream is
-//! received, a call to [`Connection::poll`] will return `(request, response)`.
+//! received, a call to [`Connection::accept`] will return `(request, response)`.
 //! The `request` handle (of type [`http::Request<RecvStream>`]) contains the
 //! HTTP request head as well as provides a way to receive the inbound data
-//! stream and the trailers. The `response` handle (of type [`SendStream`])
+//! stream and the trailers. The `response` handle (of type [`SendResponse`])
 //! allows responding to the request, stream the response payload, send
 //! trailers, and send push promises.
 //!
@@ -36,19 +36,19 @@
 //! # Managing the connection
 //!
 //! The [`Connection`] instance is used to manage connection state. The caller
-//! is required to call either [`Connection::poll`] or
+//! is required to call either [`Connection::accept`] or
 //! [`Connection::poll_close`] in order to advance the connection state. Simply
 //! operating on [`SendStream`] or [`RecvStream`] will have no effect unless the
 //! connection state is advanced.
 //!
-//! It is not required to call **both** [`Connection::poll`] and
+//! It is not required to call **both** [`Connection::accept`] and
 //! [`Connection::poll_close`]. If the caller is ready to accept a new stream,
-//! then only [`Connection::poll`] should be called. When the caller **does
+//! then only [`Connection::accept`] should be called. When the caller **does
 //! not** want to accept a new stream, [`Connection::poll_close`] should be
 //! called.
 //!
 //! The [`Connection`] instance should only be dropped once
-//! [`Connection::poll_close`] returns `Ready`. Once [`Connection::poll`]
+//! [`Connection::poll_close`] returns `Ready`. Once [`Connection::accept`]
 //! returns `Ready(None)`, there will no longer be any more inbound streams. At
 //! this point, only [`Connection::poll_close`] should be called.
 //!
@@ -402,7 +402,7 @@ where
         }
 
         if let Some(inner) = self.connection.next_incoming() {
-            log::trace!("received incoming");
+            tracing::trace!("received incoming");
             let (head, _) = inner.take_request().into_parts();
             let body = RecvStream::new(FlowControl::new(inner.clone_to_opaque()));
 
@@ -1179,7 +1179,7 @@ where
     type Output = Result<Connection<T, B>, crate::Error>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        log::trace!("Handshake::poll(); state={:?};", self.state);
+        tracing::trace!("Handshake::poll(); state={:?};", self.state);
         use crate::server::Handshaking::*;
 
         self.state = if let Flushing(ref mut flush) = self.state {
@@ -1188,11 +1188,11 @@ where
             // for the client preface.
             let codec = match Pin::new(flush).poll(cx)? {
                 Poll::Pending => {
-                    log::trace!("Handshake::poll(); flush.poll()=Pending");
+                    tracing::trace!("Handshake::poll(); flush.poll()=Pending");
                     return Poll::Pending;
                 }
                 Poll::Ready(flushed) => {
-                    log::trace!("Handshake::poll(); flush.poll()=Ready");
+                    tracing::trace!("Handshake::poll(); flush.poll()=Ready");
                     flushed
                 }
             };
@@ -1229,7 +1229,7 @@ where
                 },
             );
 
-            log::trace!("Handshake::poll(); connection established!");
+            tracing::trace!("Handshake::poll(); connection established!");
             let mut c = Connection { connection };
             if let Some(sz) = self.builder.initial_target_connection_window_size {
                 c.set_target_window_size(sz);
@@ -1289,12 +1289,12 @@ impl Peer {
         if let Err(e) = frame::PushPromise::validate_request(&request) {
             use PushPromiseHeaderError::*;
             match e {
-                NotSafeAndCacheable => log::debug!(
+                NotSafeAndCacheable => tracing::debug!(
                     "convert_push_message: method {} is not safe and cacheable; promised_id={:?}",
                     request.method(),
                     promised_id,
                 ),
-                InvalidContentLength(e) => log::debug!(
+                InvalidContentLength(e) => tracing::debug!(
                     "convert_push_message; promised request has invalid content-length {:?}; promised_id={:?}",
                     e,
                     promised_id,
@@ -1347,7 +1347,7 @@ impl proto::Peer for Peer {
 
         macro_rules! malformed {
             ($($arg:tt)*) => {{
-                log::debug!($($arg)*);
+                tracing::debug!($($arg)*);
                 return Err(RecvError::Stream {
                     id: stream_id,
                     reason: Reason::PROTOCOL_ERROR,
@@ -1367,7 +1367,7 @@ impl proto::Peer for Peer {
 
         // Specifying :status for a request is a protocol error
         if pseudo.status.is_some() {
-            log::trace!("malformed headers: :status field on request; PROTOCOL_ERROR");
+            tracing::trace!("malformed headers: :status field on request; PROTOCOL_ERROR");
             return Err(RecvError::Connection(Reason::PROTOCOL_ERROR));
         }
 

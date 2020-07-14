@@ -78,16 +78,16 @@
 //! [`server::handshake`]: server/fn.handshake.html
 //! [`client::handshake`]: client/fn.handshake.html
 
-#![doc(html_root_url = "https://docs.rs/h2/0.2.5")]
+#![doc(html_root_url = "https://docs.rs/h2/0.2.6")]
 #![deny(missing_debug_implementations, missing_docs)]
 #![cfg_attr(test, deny(warnings))]
 
 macro_rules! proto_err {
     (conn: $($msg:tt)+) => {
-        log::debug!("connection error PROTOCOL_ERROR -- {};", format_args!($($msg)+))
+        tracing::debug!("connection error PROTOCOL_ERROR -- {};", format_args!($($msg)+))
     };
     (stream: $($msg:tt)+) => {
-        log::debug!("stream error PROTOCOL_ERROR -- {};", format_args!($($msg)+))
+        tracing::debug!("stream error PROTOCOL_ERROR -- {};", format_args!($($msg)+))
     };
 }
 
