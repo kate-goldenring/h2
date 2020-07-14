@@ -1377,7 +1377,7 @@ impl proto::Peer for Peer {
         // A request translated from HTTP/1 must not include the :authority
         // header
         if let Some(authority) = pseudo.authority {
-            log::trace!("using h2 patch to ignore invalid authority headers");
+            tracing::trace!("using h2 patch to ignore invalid authority headers");
             let maybe_authority = uri::Authority::from_maybe_shared(authority.clone().into_inner());
             parts.authority = Some(
                 match maybe_authority {
